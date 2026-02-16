@@ -1,12 +1,10 @@
 """
-ETL Pipeline para Procesamiento de Datos Inmobiliarios
-======================================================
-Este script demuestra un proceso ETL completo para transformar datos
-de propiedades inmobiliarias, aplicando validaciones de calidad y
-gobernanza de datos.
+ETL Pipeline para datos inmobiliarios
+=====================================
+Pipeline para procesar y transformar datos de propiedades.
+Incluye validaciones de calidad y transformaciones de negocio.
 
-Autor: Josefa Ogalde
-Fecha: 2024
+Josefa Ogalde - 2024
 """
 
 import pandas as pd
@@ -25,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 class ETLPipeline:
     """
-    Clase principal para el proceso ETL de datos inmobiliarios.
-    Implementa las mejores prácticas de gobernanza y calidad de datos.
+    Pipeline ETL para procesar datos inmobiliarios.
+    Maneja extracción, transformación y carga de datos con validaciones.
     """
     
     def __init__(self, input_path: str, output_path: str):
@@ -53,7 +51,7 @@ class ETLPipeline:
         logger.info(f"Extrayendo datos desde: {self.input_path}")
         
         try:
-            # Simulación de extracción - en producción vendría de BD, API, etc.
+            # Por ahora lee desde archivos, pero podría venir de BD o API
             if self.input_path.suffix == '.csv':
                 self.df_raw = pd.read_csv(self.input_path, encoding='utf-8')
             elif self.input_path.suffix in ['.xlsx', '.xls']:
@@ -81,7 +79,7 @@ class ETLPipeline:
         logger.info("Iniciando validaciones de calidad de datos...")
         self.validation_errors = []
         
-        # Validación 1: Valores nulos críticos
+        # Valores nulos en columnas críticas
         critical_columns = ['id_propiedad', 'precio', 'tipo_propiedad']
         for col in critical_columns:
             if col in df.columns:
@@ -91,7 +89,7 @@ class ETLPipeline:
                         f"Columna '{col}': {null_count} valores nulos encontrados"
                     )
         
-        # Validación 2: Rangos de valores
+        # Validar rangos de valores (precios negativos no tienen sentido)
         if 'precio' in df.columns:
             negative_prices = (df['precio'] < 0).sum()
             if negative_prices > 0:
@@ -99,7 +97,7 @@ class ETLPipeline:
                     f"Precios negativos encontrados: {negative_prices}"
                 )
             
-            # Detección de outliers usando IQR
+            # Detectar outliers con método IQR (más robusto que usar desviación estándar)
             Q1 = df['precio'].quantile(0.25)
             Q3 = df['precio'].quantile(0.75)
             IQR = Q3 - Q1
@@ -108,7 +106,7 @@ class ETLPipeline:
             if outliers > 0:
                 logger.warning(f"Posibles outliers detectados: {outliers}")
         
-        # Validación 3: Duplicados
+        # Buscar duplicados por ID
         duplicates = df.duplicated(subset=['id_propiedad']).sum() if 'id_propiedad' in df.columns else 0
         if duplicates > 0:
             self.validation_errors.append(f"Registros duplicados encontrados: {duplicates}")
@@ -136,19 +134,18 @@ class ETLPipeline:
         
         df = self.df_raw.copy()
         
-        # Transformación 1: Limpieza de texto
+        # Limpiar texto: normalizar y capitalizar
         text_columns = df.select_dtypes(include=['object']).columns
         for col in text_columns:
             df[col] = df[col].astype(str).str.strip().str.title()
         
-        # Transformación 2: Normalización de precios
+        # Normalizar precios (a veces vienen con símbolos $ o comas)
         if 'precio' in df.columns:
-            # Eliminar caracteres no numéricos y convertir
             df['precio'] = pd.to_numeric(
                 df['precio'].astype(str).str.replace(r'[^\d.]', '', regex=True),
                 errors='coerce'
             )
-            # Calcular precio por m² si existe superficie
+            # Calcular precio por m² - útil para comparar propiedades
             if 'superficie_m2' in df.columns:
                 df['precio_m2'] = np.where(
                     df['superficie_m2'] > 0,
@@ -156,7 +153,7 @@ class ETLPipeline:
                     np.nan
                 )
         
-        # Transformación 3: Categorización usando NumPy
+        # Categorizar precios según rangos del mercado chileno
         if 'precio' in df.columns:
             df['categoria_precio'] = np.select(
                 [
@@ -168,14 +165,14 @@ class ETLPipeline:
                 default='No definido'
             )
         
-        # Transformación 4: Enriquecimiento de datos
+        # Extraer info de fechas para análisis temporal
         if 'fecha_publicacion' in df.columns:
             df['fecha_publicacion'] = pd.to_datetime(df['fecha_publicacion'], errors='coerce')
             df['antiguedad_dias'] = (datetime.now() - df['fecha_publicacion']).dt.days
             df['mes_publicacion'] = df['fecha_publicacion'].dt.month
             df['año_publicacion'] = df['fecha_publicacion'].dt.year
         
-        # Transformación 5: Agregaciones y métricas
+        # Ratio precio/superficie (similar a precio_m2 pero con otro nombre por compatibilidad)
         if 'superficie_m2' in df.columns and 'precio' in df.columns:
             df['ratio_precio_superficie'] = np.where(
                 df['superficie_m2'] > 0,
@@ -255,10 +252,10 @@ class ETLPipeline:
             # Extract
             self.extract()
             
-            # Validate
+            # Validar datos originales
             is_valid = self.validate_data_quality(self.df_raw)
             if not is_valid:
-                logger.warning("Datos con problemas de calidad detectados, continuando con transformación...")
+                logger.warning("Se detectaron problemas de calidad, pero continuando con la transformación...")
             
             # Transform
             self.transform()
@@ -284,20 +281,15 @@ class ETLPipeline:
 
 
 def main():
-    """
-    Función principal para ejecutar el pipeline ETL.
-    """
-    # Configuración de rutas
+    """Función principal - ejecuta el pipeline completo."""
+    # Rutas de archivos (cambiar según necesidad)
     input_file = 'data/raw/propiedades_raw.csv'
     output_file = 'data/processed/propiedades_procesadas.csv'
     
-    # Crear instancia del pipeline
     pipeline = ETLPipeline(input_path=input_file, output_path=output_file)
-    
-    # Ejecutar pipeline
     report = pipeline.run()
     
-    # Mostrar reporte
+    # Mostrar resumen
     print("\n" + "=" * 60)
     print("REPORTE DE PROCESAMIENTO")
     print("=" * 60)

@@ -1,6 +1,6 @@
 """
-Script para generar datos de ejemplo para el pipeline ETL.
-Útil para demostración y testing.
+Generador de datos de ejemplo para testing del pipeline.
+Crea un CSV con datos sintéticos de propiedades inmobiliarias.
 """
 
 import pandas as pd
@@ -22,7 +22,7 @@ def generate_sample_data(n_records: int = 100) -> pd.DataFrame:
     np.random.seed(42)
     random.seed(42)
     
-    # Tipos de propiedades
+    # Datos basados en el mercado inmobiliario de Santiago
     tipos_propiedad = ['Departamento', 'Casa', 'Oficina', 'Local Comercial', 'Terreno']
     comunas = ['Las Condes', 'Providencia', 'Ñuñoa', 'Vitacura', 'La Reina', 
                'Santiago Centro', 'Maipú', 'Puente Alto', 'San Miguel', 'La Florida']
@@ -55,7 +55,7 @@ def generate_sample_data(n_records: int = 100) -> pd.DataFrame:
     # Asegurar que la superficie sea positiva
     df['superficie_m2'] = np.abs(df['superficie_m2'])
     
-    # Agregar algunos valores nulos para testing de validaciones
+    # Agregar algunos nulos para probar las validaciones
     null_indices = np.random.choice(df.index, size=int(n_records * 0.05), replace=False)
     df.loc[null_indices, 'descripcion'] = None
     
@@ -75,8 +75,8 @@ def main():
     output_file = data_dir / 'propiedades_raw.csv'
     df.to_csv(output_file, index=False, encoding='utf-8-sig')
     
-    print(f"✓ Datos generados: {len(df)} registros")
-    print(f"✓ Guardado en: {output_file}")
+    print(f"[OK] Datos generados: {len(df)} registros")
+    print(f"[OK] Guardado en: {output_file}")
     print(f"\nVista previa:")
     print(df.head())
 
